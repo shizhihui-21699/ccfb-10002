@@ -1,0 +1,17 @@
+table ip6 filter {
+	chain input {
+		type filter hook input priority filter; policy accept;
+		# 0: /32 宽 DROP，覆盖整个 2001:db8:: 段
+		ip6 saddr 2001:db8::/32 drop
+		# 1: /128 单点，落在 /32 内 -> 被遮蔽
+		ip6 saddr 2001:db8::1/128 tcp dport 22 accept
+		# 2: 紧邻 /32 边界之外（2001:db9:: 是下一个 /32），绝不能误判为被遮蔽
+		ip6 saddr 2001:db9::1/128 accept
+		# 3: /48 完全包含于 /32 -> 被遮蔽
+		ip6 saddr 2001:db8:1::/48 udp dport 53 accept
+		# 4: 与 #0 在 /32 上冲突
+		ip6 saddr 2001:db8:2::/64 accept
+		# 5: 不同前缀，无交集，独立存活
+		ip6 saddr fe80::/10 accept
+	}
+}

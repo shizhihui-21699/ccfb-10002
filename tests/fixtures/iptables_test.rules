@@ -1,0 +1,45 @@
+# 故意构造的验证规则集：遮蔽 / 联合遮蔽 / 冗余 / 冲突 / 空匹配 / 不可达链
+*filter
+:INPUT DROP [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:MAINTENANCE - [0:0]
+:ORPHAN_CHAIN - [0:0]
+# 0: 宽规则，遮蔽后面的 1/2
+-A INPUT -s 10.0.0.0/8 -j DROP
+# 1: 被 #0 单条完全遮蔽（10.1.2.3 ∈ 10.0.0.0/8，tcp dport 22 是附加约束）
+-A INPUT -s 10.1.2.3/32 -p tcp --dport 22 -j ACCEPT
+# 2: 同样被 #0 单条遮蔽
+-A INPUT -s 10.0.0.0/16 -p tcp --dport 80 -j REJECT --reject-with icmp-port-unreachable
+# 3: 与 #1 匹配空间完全相同 -> 冗余（重复）
+-A INPUT -s 10.1.2.3/32 -p tcp --dport 22 -j DROP
+# 4: 自相矛盾 -> 空匹配 -> 冗余
+-A INPUT -s 192.168.1.0/24 ! -s 192.168.1.0/24 -j ACCEPT
+# 5: 联合遮蔽案例的第一段：172.16.0.0/16 内 tcp 流量 DROP
+-A INPUT -s 172.16.0.0/16 -p tcp -j DROP
+# 6: 联合遮蔽第二段：同段“非 tcp”流量 DROP（! 在选项前）；5+6 合起来覆盖该段全部协议
+-A INPUT -s 172.16.0.0/16 ! -p tcp -j DROP
+# 7: 被 #5 与 #6 联合遮蔽（无协议约束）：单条都盖不住，两条合起来任何协议都被终结
+-A INPUT -s 172.16.5.5/32 -j ACCEPT
+# 8: 冲突对：与 #5 在 172.16.0.0/16+tcp 上动作相反（DROP vs ACCEPT）；本身也被 #5 遮蔽
+-A INPUT -s 172.16.0.0/16 -p tcp --dport 443 -j ACCEPT
+# 9: 取反地址，独立规则
+-A INPUT ! -s 10.0.0.0/8 -p icmp --icmp-type echo-request -j ACCEPT
+# 10: 接口前缀通配 + 多端口
+-A INPUT -i eth+ -p tcp -m multiport --dports 8000,8001,8002 -j ACCEPT
+# 11: 跳自定义链（目标链必然终结：开头即无条件 DROP）
+-A INPUT -s 203.0.113.0/24 -j MAINTENANCE
+# 12: 被 #11 遮蔽吗？不会 —— MAINTENANCE 虽然必然终结，但 #11 只覆盖 /24，
+#     这条是 /25 且在 /24 之外，因此应正常存活（验证不做过度报告）
+-A INPUT -s 198.51.100.0/25 -j ACCEPT
+# 13: goto 验证
+-A INPUT -s 198.18.0.0/16 -g MAINTENANCE
+# 自定义链：第一条无条件 DROP => 必然终结
+-A MAINTENANCE -j DROP
+# 下面两条永远到不了（链内被上一条遮蔽）
+-A MAINTENANCE -p tcp --dport 22 -j ACCEPT
+-A MAINTENANCE -s 203.0.113.7/32 -j RETURN
+# 无人引用的链：整链不可达，内部再加一条冲突对
+-A ORPHAN_CHAIN -s 10.0.0.0/24 -j ACCEPT
+-A ORPHAN_CHAIN -s 10.0.0.0/24 -j DROP
+COMMIT

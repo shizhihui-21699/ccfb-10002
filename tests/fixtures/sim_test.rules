@@ -1,0 +1,14 @@
+# 模拟器专用：验证 RETURN 回退、链尾策略、自定义链不匹配后继续
+*filter
+:INPUT DROP [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:GATE - [0:0]
+# 0: 所有 tcp 先跳 GATE
+-A INPUT -p tcp -j GATE
+# 1: GATE 若 RETURN，tcp/22 放行
+-A INPUT -p tcp --dport 22 -j ACCEPT
+# 2: 其余落默认 DROP
+-A GATE -s 10.0.0.0/8 -j DROP
+# GATE 链尾隐式 RETURN
+COMMIT

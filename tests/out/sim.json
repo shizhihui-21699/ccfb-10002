@@ -1,0 +1,2 @@
+{"packet":{"src_ip":"203.0.113.9","dst_ip":"1.1.1.1","proto":6,"src_port":0,"dst_port":22,"iif":"","oif":""},
+"final_verdict":"ACCEPT","loop_detected":false,"error":null,"steps":[{"table":"filter","chain":"input","evaluated":[0,1,2,3,4,5,6,7,8,9,10],"hit":{"index":10,"action":"jump audit"},"outcome":"命中规则 #10，JUMP -> audit"},{"table":"filter","chain":"audit","evaluated":[0],"hit":{"index":0,"action":"accept"},"outcome":"命中规则 #0，判定 accept"}]}

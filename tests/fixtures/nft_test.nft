@@ -1,0 +1,46 @@
+table inet filter {
+	set mgmt_nets {
+		type ipv4_addr
+		elements = { 10.1.0.0/16, 10.2.0.0/16 }
+	}
+	set open_ports {
+		type inet_service
+		elements = { 80, 443, 8080 }
+	}
+	chain input {
+		type filter hook input priority filter; policy drop;
+		# 0: 宽 DROP，遮蔽后面 1
+		ip saddr 10.0.0.0/8 drop
+		# 1: 被 #0 单条遮蔽
+		ip saddr 10.1.2.3 tcp dport 22 accept
+		# 2: 命名 set 引用
+		ip saddr @mgmt_nets tcp dport @open_ports accept
+		# 3: 取反
+		ip saddr != 10.0.0.0/8 icmp type echo-request accept
+		# 4: 内联集合
+		tcp dport { 3000, 3001, 3002 } accept
+		# 5: 接口名
+		iifname "eth0" udp dport 53 accept
+		# 6: 联合遮蔽第一段
+		ip saddr 172.16.0.0/16 meta l4proto tcp drop
+		# 7: 联合遮蔽第二段（非 tcp）
+		ip saddr 172.16.0.0/16 meta l4proto != tcp drop
+		# 8: 被 6+7 联合遮蔽
+		ip saddr 172.16.9.9 accept
+		# 9: 冲突对（与 #0 在 10/8 上 drop vs accept）
+		ip saddr 10.5.0.0/16 accept
+		# 10: jump 自定义链
+		ip saddr 203.0.113.0/24 jump audit
+		# 11: 空匹配（同一字段两个互斥协议，靠重复 l4proto 约束）
+		meta l4proto tcp meta l4proto udp accept
+	}
+	chain audit {
+		# 必然终结
+		accept
+		# 被遮蔽
+		tcp dport 22 drop
+	}
+	chain orphan {
+		ip saddr 192.0.2.0/24 accept
+	}
+}
