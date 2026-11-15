@@ -1,0 +1,8 @@
+[package]
+name = "fwaudit"
+version = "0.1.0"
+edition = "2021"
+description = "Firewall ruleset auditor: shadowing/redundancy/conflict analysis and packet simulation for iptables-save and nftables exports"
+
+[profile.release]
+opt-level = 3

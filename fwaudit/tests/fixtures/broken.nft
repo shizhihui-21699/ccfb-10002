@@ -1,0 +1,53 @@
+#!/usr/sbin/nft -f
+# nftables fixture with planted shadowing/redundancy/conflicts
+table inet filter {
+	set blockv4 {
+		type ipv4_addr
+		flags interval
+		elements = { 10.0.0.0/8, 172.16.0.0/12 }
+	}
+	set webports {
+		type inet_service
+		elements = { 80, 443 }
+	}
+	chain input {
+		type filter hook input priority 0; policy drop;
+		# 1: drop blocked ranges
+		ip saddr @blockv4 drop
+		# 2: SHADOWED by #1 (10.9/16 is inside 10/8)
+		ip saddr 10.9.0.0/16 drop
+		# 3: allow web
+		tcp dport @webports accept
+		# 4: REDUNDANT: 443 already in @webports
+		tcp dport 443 accept
+		# 5: allow ssh from admin net
+		ip saddr 192.0.2.0/24 tcp dport 22 accept
+		# 6: CONFLICT with #5: /23 overlaps the admin /24, different action
+		ip saddr 192.0.2.0/23 tcp dport 22 drop
+		# 7: v6 allow
+		ip6 saddr 2001:db8::/32 tcp dport 22 accept
+		# 8: SHADOWED by #7 (subset v6 range)
+		ip6 saddr 2001:db8:1::/48 tcp dport 22 accept
+		# 9: jump to logging chain for one net
+		ip saddr 203.0.113.0/24 jump logdrop
+		# 10: SHADOWED by #9: logdrop never returns
+		ip saddr 203.0.113.9 accept
+		# 11: established traffic (opaque ct state) - must NOT be flagged
+		ct state established,related accept
+		# 12: udp dns allow
+		udp dport 53 accept
+		# 13: REDUNDANT duplicate of #12
+		udp dport 53 accept
+		# 14: POLICY-DUP: catch-all drop == policy
+		drop
+		# 15: SHADOWED by #14
+		tcp dport 8080 accept
+	}
+	chain logdrop {
+		log prefix "dropped: "
+		drop
+	}
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+	}
+}

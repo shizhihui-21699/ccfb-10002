@@ -1,0 +1,44 @@
+# iptables-save fixture with deliberately planted problems
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+:LOGDROP - [0:0]
+:TRUSTED - [0:0]
+# 1: blanket drop of 10/8
+-A INPUT -s 10.0.0.0/8 -j DROP
+# 2: SHADOWED by #1 (subset, same action would still be dead)
+-A INPUT -s 10.1.0.0/16 -j DROP
+# 3: allow ssh
+-A INPUT -p tcp --dport 22 -j ACCEPT
+# 4: SHADOWED by #1 (10.2.x ssh packets already dropped by #1)
+-A INPUT -p tcp -s 10.2.0.0/16 --dport 22 -j ACCEPT
+# 5: REDUNDANT: exact duplicate of #3
+-A INPUT -p tcp --dport 22 -j ACCEPT
+# 6: drop a /16
+-A INPUT -s 192.168.0.0/16 -j DROP
+# 7: CONFLICT with #6: /15 overlaps half, different action
+-A INPUT -s 192.168.0.0/15 -j ACCEPT
+# 8: web allow
+-A INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT
+# 9: REDUNDANT: 443 already allowed by #8
+-A INPUT -p tcp --dport 443 -j ACCEPT
+# 10: jump to LOGDROP for a subnet
+-A INPUT -s 172.16.0.0/12 -j LOGDROP
+# 11: SHADOWED by #10: LOGDROP never returns (ends in unconditional DROP)
+-A INPUT -s 172.16.8.0/24 -j ACCEPT
+# 12: jump to TRUSTED (returns) - fine
+-A INPUT -s 203.0.113.0/24 -j TRUSTED
+# 13: negation: not from 198.51.100.0/24 -> drop
+-A INPUT ! -s 198.51.100.0/24 -p udp --dport 53 -j DROP
+# 14: SHADOWED by #13 (its packets are a subset of "not 198.51.100.0/24")
+-A INPUT -s 203.0.113.0/24 -p udp --dport 53 -j DROP
+# 15: POLICY-DUP: catches all remaining, same as policy DROP
+-A INPUT -j DROP
+# 16: SHADOWED by #15 (unreachable)
+-A INPUT -p tcp --dport 8080 -j ACCEPT
+-A LOGDROP -j LOG
+-A LOGDROP -j DROP
+-A TRUSTED -p tcp --dport 443 -j ACCEPT
+-A TRUSTED -j RETURN
+COMMIT
